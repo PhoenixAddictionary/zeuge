@@ -32,8 +32,8 @@ section for the exact same check run by hand, with exact commands and output, no
 
 ## How it is wired
 
-The plugin wires `.claude-plugin/plugin.json`'s `hooks` entry to `hooks/hooks.json` — the ONLY
-hooks file in this package — which runs `node "${CLAUDE_PLUGIN_ROOT}/bin/zeuge.js" claim hook
+Claude Code auto-loads the package's `hooks/hooks.json` (the ONLY hooks file; do not also
+list it under `plugin.json` `hooks` or the plugin fails with a duplicate-hooks error). It runs `node "${CLAUDE_PLUGIN_ROOT}/bin/zeuge.js" claim hook
 --event Stop` on `Stop` and `node "${CLAUDE_PLUGIN_ROOT}/bin/zeuge.js" ledger hook --event
 PostToolUse` on `Bash|Write|Edit`. Both are read-only at the plugin layer: they never block a
 tool call or a turn (exit 0 always). `${CLAUDE_PLUGIN_ROOT}` is quoted in every command so an
