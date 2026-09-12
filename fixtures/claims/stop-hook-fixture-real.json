@@ -1,0 +1,13 @@
+{
+  "session_id": "session:56565656565656565656565656565656",
+  "prompt_id": "prompt:78787878787878787878787878787878",
+  "transcript_path": "/nonexistent/not-used-because-last_assistant_message-is-present.jsonl",
+  "cwd": "/tmp/zeuge-fixture-project-real",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": {
+    "type": "text",
+    "text": "All tests pass. Deployed to production."
+  }
+}

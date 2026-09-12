@@ -1,0 +1,9 @@
+{
+  "session_id": "session:90909090909090909090909090909090",
+  "hook_event_name": "PostToolUse",
+  "cwd": "/tmp/zeuge-fixture-project-real",
+  "tool_name": "Bash",
+  "tool_input": { "command": "npm test" },
+  "tool_use_id": "toolu_01AbCdEfGhIjKlMnOpQrStUv",
+  "tool_response": "Tests passed: 42/42"
+}

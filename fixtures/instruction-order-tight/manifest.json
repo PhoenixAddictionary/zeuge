@@ -1,0 +1,7 @@
+[
+  { "file": "01-fp-cwd-unset-env.md", "expected": 0, "name": "measured false positive: 'before' as ordinary prose mid-sentence (cwd/unset)" },
+  { "file": "02-fp-view-model.md", "expected": 0, "name": "measured false positive: 'unless' as ordinary prose mid-sentence (view model)" },
+  { "file": "03-fp-device-pixel-ratio.md", "expected": 0, "name": "measured false positive: 'only when' as ordinary prose mid-sentence (devicePixelRatio)" },
+  { "file": "04-tp-before-adjacent.md", "expected": 1, "name": "leading 'before', immediately adjacent to its action bullet — still fires" },
+  { "file": "05-tp-blank-line-breaks-it.md", "expected": 0, "name": "same leading 'before', but a blank line separates it from the action bullet — no longer adjacent, does not fire" }
+]

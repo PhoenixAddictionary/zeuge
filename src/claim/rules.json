@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "tests-pass.v1",
+    "claim_type": "tests_pass",
+    "pattern": "\\b(all\\s+)?tests?\\s+(pass|passed|passing)\\b",
+    "flags": "i",
+    "note": "requires tests/test directly followed by a pass/passed/passing form; 'the tests would pass' does not match because a modal sits between the words."
+  },
+  {
+    "rule_id": "deployed.v2",
+    "claim_type": "deployed",
+    "pattern": "\\bdeployed\\b|\\bdeployment\\s+(finished|completed|done|succeeded)\\b",
+    "flags": "i",
+    "note": "v2: bare 'deployed', with or without 'to production', OR 'deployment finished/completed/done/succeeded' — 'Deployment finished, all green.' did not fire under v1's bare-word match."
+  },
+  {
+    "rule_id": "fixed.v1",
+    "claim_type": "fixed",
+    "pattern": "\\bfixed\\b",
+    "flags": "i",
+    "note": "bare 'fixed', e.g. 'fixed the bug'."
+  },
+  {
+    "rule_id": "done.v1",
+    "claim_type": "done",
+    "pattern": "\\bdone\\b",
+    "flags": "i",
+    "note": "bare 'done'."
+  }
+]

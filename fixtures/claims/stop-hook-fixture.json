@@ -1,0 +1,16 @@
+{
+  "session_id": "session:12121212121212121212121212121212",
+  "hook_event_name": "Stop",
+  "cwd": "/tmp/zeuge-fixture-project",
+  "agent": {
+    "id": "agent:34343434343434343434343434343434",
+    "vendor": "anthropic",
+    "model": "claude-sonnet-5",
+    "harness": "claude-code",
+    "harness_version": "test"
+  },
+  "transcript": [
+    { "role": "user", "content": "Ship it." },
+    { "role": "assistant", "content": "All tests pass. Deployed." }
+  ]
+}

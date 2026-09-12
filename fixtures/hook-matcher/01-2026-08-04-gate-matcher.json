@@ -1,0 +1,1 @@
+{"hooks":{"PreToolUse":[{"matcher":"Bash|PowerShell|Read|Grep|Glob|Write|Edit","hooks":[]}]}}

@@ -1,0 +1,7 @@
+{
+  "name": "zeuge",
+  "owner": { "name": "Raeder Unfinished" },
+  "plugins": [
+    { "name": "zeuge", "source": "./" }
+  ]
+}

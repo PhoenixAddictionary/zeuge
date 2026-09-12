@@ -1,0 +1,14 @@
+node_modules/
+*.log
+.DS_Store
+coverage/
+.zeuge/
+
+# dist/ IS tracked (P9): a Claude Code plugin install pulls from git, not from the npm
+# registry, so an untracked dist/ leaves the plugin's hook commands unable to find their own
+# compiled code. `npm run verify:dist` fails the build if this ever drifts from a fresh build.
+# The repo-root .gitignore has a blanket `dist/` rule for the monorepo at large; these two
+# lines are the standard git double-pattern un-ignore (the directory itself, then its
+# contents) needed to override an ancestor ignore rule for this package specifically.
+!dist/
+!dist/**

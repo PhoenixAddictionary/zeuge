@@ -1,0 +1,15 @@
+[
+  { "file": "01-2026-08-04-gate-matcher.json", "expected": 1, "name": "the 2026-08-04 gate matcher" },
+  { "file": "02-mutation-only-clean.json", "expected": 0, "name": "mutation-only matcher is fine" },
+  { "file": "03-substring-lookalike-clean.json", "expected": 0, "name": "substring lookalike is not a hit" },
+  { "file": "04-no-matcher-key.json", "expected": 1, "name": "no matcher key at all (a missing matcher gates EVERY tool, corrected from the old expectation of 0)" },
+  { "file": "05-no-pretooluse-section.json", "expected": 0, "name": "no PreToolUse section" },
+  { "file": "06-no-hooks-section.json", "expected": 0, "name": "no hooks section" },
+  { "file": "07-two-offending-groups.json", "expected": 2, "name": "two offending groups counted separately" },
+  { "file": "08-alternation-in-group.json", "expected": 1, "name": "regex alternation (Read|Grep) gates Read as a regex, not a literal alternative" },
+  { "file": "09-wildcard-read.json", "expected": 1, "name": "Read.* gates Read as a regex" },
+  { "file": "10-reader-literal-no-match.json", "expected": 0, "name": "Reader as a literal does not match Read anchored" },
+  { "file": "11-bash-write-no-match.json", "expected": 0, "name": "Bash|Write does not gate any diagnostic tool" },
+  { "file": "12-invalid-regex.json", "expected": 1, "name": "an invalid regex (Read() is reported, never silently skipped" },
+  { "file": "13-empty-string-matcher.json", "expected": 1, "name": "an explicit empty-string matcher gates EVERY tool, same as a missing key" }
+]

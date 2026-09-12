@@ -1,0 +1,5 @@
+{
+  "session_id": "session:99999999999999999999999999999999",
+  "text": "All tests pass.",
+  "note": "fed to runClaimPass twice with the same session_id and a carried-forward seen set; the second pass must flag replay:true and must not be counted as a second distinct claim."
+}

@@ -1,0 +1,1 @@
+{"hooks":{"PreToolUse":[{"matcher":"ReadFile|GlobalSetup|Grepper","hooks":[]}]}}

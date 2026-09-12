@@ -1,0 +1,6 @@
+[
+  { "file": "empty-output-exit-0.json", "expected": "UNPROVEN", "name": "empty output, exit 0, not declared silent" },
+  { "file": "output-exit-0.json", "expected": "PASS", "name": "non-empty output, exit 0" },
+  { "file": "expected-silent-flag.json", "expected": "PASS", "name": "empty output, exit 0, declared expected-silent" },
+  { "file": "nonzero.json", "expected": "FAIL", "name": "non-zero exit code" }
+]

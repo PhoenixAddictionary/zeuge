@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash|Read|Grep", "hooks": [] }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "zeuge",
+  "description": "Audit what your coding agent claimed, not just what it ran: instruction-file lints, a claim-vs-witness Stop hook, and a hash-chained ledger.",
+  "version": "0.1.0",
+  "author": { "name": "Raeder Unfinished" },
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json"
+}

@@ -1,0 +1,17 @@
+[
+  { "file": "01-order-first-clean.md", "expected": 0, "name": "order clause first (clean)" },
+  { "file": "02-order-after-action.md", "expected": 1, "name": "order clause AFTER action (the v2 bug)" },
+  { "file": "03-standing-prohibition-not-flagged.md", "expected": 0, "name": "standing prohibition after action is NOT flagged" },
+  { "file": "04-english-unless-after-action.md", "expected": 1, "name": "english unless after action" },
+  { "file": "05-english-first-before-action-clean.md", "expected": 0, "name": "english first before action (clean)" },
+  { "file": "06-action-then-order-in-next-block.md", "expected": 0, "name": "action in one block, order clause in the NEXT block" },
+  { "file": "07-marker-comment-separates-blocks.md", "expected": 0, "name": "marker comment also separates blocks" },
+  { "file": "08-numbered-list-scanned.md", "expected": 1, "name": "numbered list is scanned too" },
+  { "file": "09-bold-markup-does-not-hide-class.md", "expected": 1, "name": "bold markup does not hide the class" },
+  { "file": "10-prose-paragraphs-not-scanned.md", "expected": 0, "name": "prose paragraphs are not scanned (declared blind spot)" },
+  { "file": "11-no-action-order-alone.md", "expected": 0, "name": "no action at all, order clause alone" },
+  { "file": "12-verdict-first-compound-not-a-clause.md", "expected": 0, "name": "verdict-first in a compound is not an ordering clause" },
+  { "file": "13-bevorzugung-does-not-match-bevor.md", "expected": 0, "name": "Bevorzugung does not match bevor" },
+  { "file": "14-real-bevor-clause-matches.md", "expected": 1, "name": "a real bevor clause still matches" },
+  { "file": "15-real-first-clause-matches.md", "expected": 1, "name": "a real first clause still matches" }
+]

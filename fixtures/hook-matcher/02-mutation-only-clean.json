@@ -1,0 +1,1 @@
+{"hooks":{"PreToolUse":[{"matcher":"Bash|PowerShell","hooks":[]},{"matcher":"Write","hooks":[]},{"matcher":"Edit|MultiEdit","hooks":[]}]}}
