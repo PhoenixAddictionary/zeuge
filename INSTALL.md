@@ -1,11 +1,7 @@
 # Install
 
-**Replace `<owner>/<repo>` below with wherever this package's repository is actually hosted.**
-The maintainer substitutes the real path before publishing; as checked out here it is a
-placeholder, not a copy-pasteable value.
-
 ```
-claude plugin marketplace add <owner>/<repo>
+claude plugin marketplace add PhoenixAddictionary/zeuge
 claude plugin install zeuge@zeuge
 ```
 
