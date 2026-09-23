@@ -1,0 +1,33 @@
+name: Relay
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+jobs:
+  composer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hand the morning check to Composer
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          if [ -z "$CURSOR_API_KEY" ]; then
+            echo "CURSOR_API_KEY is not set. Skipped."
+            exit 0
+          fi
+          node --input-type=module -e '
+            const prompt = "Morning check of zeuge. Run the tests. If one fails, fix that failure only. If they pass, stop. Do not add features.";
+            const res = await fetch("https://api.cursor.com/v1/agents", {
+              method: "POST",
+              headers: { Authorization: "Bearer " + process.env.CURSOR_API_KEY, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt: { text: prompt },
+                model: { id: "composer-2.5", params: [{ id: "fast", value: "false" }] },
+                repos: [{ url: "https://github.com/PhoenixAddictionary/zeuge", startingRef: "main" }],
+                autoCreatePR: false
+              })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { console.error(res.status); process.exit(1); }
+            console.log(data.agent && (data.agent.url || data.agent.id) || "accepted");
+          '
