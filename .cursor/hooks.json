@@ -3,7 +3,8 @@
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "command": "node relay/hold.mjs cursor"
+        "command": "node relay/hold.mjs cursor",
+        "failClosed": true
       }
     ]
   }
