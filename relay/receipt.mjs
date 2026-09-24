@@ -34,6 +34,7 @@ for (const line of lines) {
   if (row.action === "stop" || row.why === "owner-gate") {
     counts.stops += 1;
     counts.list += Number(row.listUsd) || 0;
+    if (row.sent) counts.sent += 1;
     continue;
   }
   if (row.action === "hold") {

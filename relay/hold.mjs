@@ -166,25 +166,30 @@ function stopCursor(message) {
 const config = loadConfig();
 if (!heard.trim()) allow("empty");
 
+let refused = "";
+let phrase = "";
 const gate = ownerGate(heard);
 if (gate && !ownerAccepted(prompt, gate)) {
+  phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
   const price = listPrice(prompt || heard, gate);
-  const phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
-  note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
-  const stopped = stoppedThisWeek();
-  const message = `Stopped. ${gateName(gate)} did not start. Nothing was called. Write "${phrase}" in this task if you mean it. Stopped this week: ${stopped.n}.`;
-  if (tool === "cursor") stopCursor(message);
-  process.stderr.write(`${message}\n`);
-  process.exit(2);
+  if ((tool === "cursor" && event === "tool") || !prompt.trim()) {
+    note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
+    const stopped = stoppedThisWeek();
+    const message = `Stopped. ${gateName(gate)} did not start. This call was not sent on. Write "${phrase}" in the task if you mean it. Stopped this week: ${stopped.n}.`;
+    if (tool === "cursor") stopCursor(message);
+    process.stderr.write(`${message}\n`);
+    process.exit(2);
+  }
+  refused = gate;
 }
-if (gate) allow("owner-accepted");
+if (gate && !refused) allow("owner-accepted");
 
 if (BILL.test(prompt)) allow("bill");
 
-if (tool === "cursor" && event !== "prompt") allow("included");
+if (!refused && tool === "cursor" && event !== "prompt") allow("included");
 
 const model = String(body.model || body.model_id || "");
-if (tool === "cursor") {
+if (!refused && tool === "cursor") {
   if (model && INCLUDED.test(model) && !REFUSED.test(model)) allow("included");
 }
 
@@ -195,13 +200,17 @@ const branch = process.env.RELAY_BRANCH || String(config.branch || "main");
 let handoff = "";
 let sent = false;
 
+const outbound = refused
+  ? `Do this on ${pinned} only. Do not call Fable, Opus Max, GPT Pro, or Astra.\n\n${prompt}`
+  : prompt;
+
 if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(repo)) {
   try {
     const response = await fetch("https://api.cursor.com/v1/agents", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: { text: prompt.slice(0, 12000) },
+        prompt: { text: outbound.slice(0, 12000) },
         model: pinned.startsWith("composer")
           ? { id: pinned, params: [{ id: "fast", value: "false" }] }
           : { id: pinned },
@@ -223,6 +232,22 @@ if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.te
     : repo
       ? " Not sent. The Cursor key is not in CURSOR_API_KEY or cursorKey."
       : " Not sent. Set repo and the Cursor key in ~/.relay/config.json.";
+}
+
+if (refused) {
+  note({ action: "stop", pinned: refused, sent, savedUsd: 0, listUsd: listPrice(prompt, refused), why: "owner-gate" });
+  const stopped = stoppedThisWeek();
+  const message = `${sent ? `Stopped. ${gateName(refused)} did not start. The task went to ${pinned}.${handoff}` : `Stopped. ${gateName(refused)} did not start. The task was not started.${handoff}`} Write "${phrase}" if you mean ${gateName(refused)}. Stopped this week: ${stopped.n}.`;
+  if (tool === "cursor" && event !== "prompt") {
+    process.stdout.write(JSON.stringify({ permission: "deny", user_message: message }));
+    process.exit(0);
+  }
+  if (tool === "cursor") {
+    process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
+    process.exit(0);
+  }
+  process.stderr.write(`${message}\n`);
+  process.exit(2);
 }
 
 note({ action: "hold", pinned, sent, savedUsd: sent ? estimate(prompt) : 0 });
