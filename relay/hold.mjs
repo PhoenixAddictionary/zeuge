@@ -172,7 +172,7 @@ if (gate && !ownerAccepted(prompt, gate)) {
   const phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
   note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
   const stopped = stoppedThisWeek();
-  const message = `Stopped. ${gateName(gate)} tried to start. Nothing was called. It does not start until this task says "${phrase}". List price of this prompt if it had run: ${money(price)}. Stopped this week: ${stopped.n}. List price of what did not run: ${money(stopped.list)}. Estimate, not a bill.`;
+  const message = `Stopped. ${gateName(gate)} did not start. Nothing was called. Write "${phrase}" in this task if you mean it. Stopped this week: ${stopped.n}.`;
   if (tool === "cursor") stopCursor(message);
   process.stderr.write(`${message}\n`);
   process.exit(2);
@@ -226,9 +226,7 @@ if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.te
 }
 
 note({ action: "hold", pinned, sent, savedUsd: sent ? estimate(prompt) : 0 });
-const saved = totals();
-const added = sent ? estimate(prompt) : 0;
-const message = `Held for your Cursor subscription (${pinned}).${handoff} This prompt kept ${money(added)} off Sonnet 5's list price. This week ${money(saved.week)}. Since the router was installed ${money(saved.all)}. Estimate, not a bill.${poolWarning(config)} Write "bill this model" only if you mean to spend this tool.`;
+const message = `${sent ? `Held. On ${pinned}, inside the Cursor seat.${handoff}` : `Held. Nothing metered was called.${handoff}`}${poolWarning(config)}`;
 
 if (tool === "cursor") {
   process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
