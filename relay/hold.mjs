@@ -7,6 +7,7 @@
 
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +21,7 @@ function ownerGate(text) {
   if (/\bfable\b|fable-\d/.test(s)) return "fable";
   if (/opus[\w.-]*max|\bmax[\s-]*mode\b/.test(s)) return "max";
   if (/opus/.test(s) && /\b(effort|thinking)\b[^\n]{0,16}\bmax\b/.test(s)) return "max";
+  if (/(?:opus|gpt|o[13]|gemini|grok|claude|sol)[\w.-]*-max\b/.test(s)) return "max";
   if (/\bastra\b/.test(s)) return "astra";
   if (/\bo3-pro\b|gpt[-\w.]*pro\b/.test(s)) return "pro";
   return "";
@@ -39,7 +41,7 @@ function listPrice(text, gate) {
 
 function gateName(gate) {
   if (gate === "fable") return "Fable";
-  if (gate === "max") return "Opus Max";
+  if (gate === "max") return "The max model";
   if (gate === "astra") return "Astra";
   return "GPT Pro";
 }
@@ -84,14 +86,72 @@ function estimate(text) {
   return (inputTokens / 1_000_000) * 2 + (outputTokens / 1_000_000) * 10;
 }
 
-function repoFromGit() {
+function roots() {
+  const found = [];
+  if (Array.isArray(body.workspace_roots)) found.push(...body.workspace_roots);
+  if (typeof body.cwd === "string") found.push(body.cwd);
+  if (typeof body.workspace_root === "string") found.push(body.workspace_root);
+  return found.map(String).filter(Boolean);
+}
+
+function repoFromGit(cwd) {
   try {
-    const url = execSync("git remote get-url origin", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const url = execSync("git remote get-url origin", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      ...(cwd ? { cwd } : {}),
+    }).trim();
     const match = url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?$/);
     return match ? `https://github.com/${match[1]}` : "";
   } catch {
     return "";
   }
+}
+
+function discoverRepo() {
+  for (const root of roots()) {
+    const found = repoFromGit(root);
+    if (found) return found;
+  }
+  return repoFromGit();
+}
+
+function treeDirty() {
+  const places = roots();
+  if (!places.length) places.push("");
+  for (const root of places) {
+    try {
+      const out = execSync("git status --porcelain", {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        ...(root ? { cwd: root } : {}),
+      });
+      if (out.trim()) return true;
+    } catch {
+      // not a checkout
+    }
+  }
+  return false;
+}
+
+function taskKey(text) {
+  return createHash("sha256").update(String(text)).digest("hex").slice(0, 16);
+}
+
+function recentlySent(text) {
+  try {
+    const id = taskKey(text);
+    const lines = readFileSync(join(dir, "log.jsonl"), "utf8").trim().split("\n").slice(-30);
+    const now = Date.now();
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const row = JSON.parse(lines[i]);
+      if (now - Date.parse(row.t) > 60_000) break;
+      if (row.sent && row.task === id) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function poolWarning(config) {
@@ -195,16 +255,26 @@ if (!refused && tool === "cursor") {
 
 const pinned = JUDGMENT.test(prompt) ? "grok-4.7" : "composer-2.5";
 const key = process.env.CURSOR_API_KEY || String(config.cursorKey || "");
-const repo = process.env.RELAY_REPO || String(config.repo || "") || repoFromGit();
+const repo = process.env.RELAY_REPO || String(config.repo || "") || discoverRepo();
 const branch = process.env.RELAY_BRANCH || String(config.branch || "main");
 let handoff = "";
 let sent = false;
+let skip = "";
+if (refused && tool === "cursor") {
+  skip = " Not sent to a cloud agent. This chat already has the files. Switch the picker to Composer.";
+} else if (treeDirty()) {
+  skip = " Not sent to a cloud agent. This checkout has changes GitHub does not have.";
+} else if (recentlySent(prompt)) {
+  skip = " Already handed on. A second agent was not started.";
+}
 
 const outbound = refused
   ? `Do this on ${pinned} only. Do not call Fable, Opus Max, GPT Pro, or Astra.\n\n${prompt}`
   : prompt;
 
-if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(repo)) {
+if (skip) {
+  handoff = skip;
+} else if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(repo)) {
   try {
     const response = await fetch("https://api.cursor.com/v1/agents", {
       method: "POST",
@@ -235,7 +305,7 @@ if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.te
 }
 
 if (refused) {
-  note({ action: "stop", pinned: refused, sent, savedUsd: 0, listUsd: listPrice(prompt, refused), why: "owner-gate" });
+  note({ action: "stop", pinned: refused, sent, savedUsd: 0, listUsd: listPrice(prompt, refused), why: "owner-gate", task: taskKey(prompt) });
   const stopped = stoppedThisWeek();
   const message = `${sent ? `Stopped. ${gateName(refused)} did not start. The task went to ${pinned}.${handoff}` : `Stopped. ${gateName(refused)} did not start. The task was not started.${handoff}`} Write "${phrase}" if you mean ${gateName(refused)}. Stopped this week: ${stopped.n}.`;
   if (tool === "cursor" && event !== "prompt") {
@@ -250,7 +320,7 @@ if (refused) {
   process.exit(2);
 }
 
-note({ action: "hold", pinned, sent, savedUsd: sent ? estimate(prompt) : 0 });
+note({ action: "hold", pinned, sent, savedUsd: sent ? estimate(prompt) : 0, task: taskKey(prompt) });
 const message = `${sent ? `Held. On ${pinned}, inside the Cursor seat.${handoff}` : `Held. Nothing metered was called.${handoff}`}${poolWarning(config)}`;
 
 if (tool === "cursor") {
