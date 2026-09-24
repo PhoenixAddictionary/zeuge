@@ -24,6 +24,7 @@
     "verify:dist": "node scripts/verify-dist.js",
     "pretest": "npm run verify:dist",
     "test": "vitest run",
+    "relay:pins": "node relay/check-pins.mjs",
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {
