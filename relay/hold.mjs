@@ -19,6 +19,7 @@ function ownerGate(text) {
   const s = text.toLowerCase();
   if (/\bfable\b|fable-\d/.test(s)) return "fable";
   if (/opus[\w.-]*max|\bmax[\s-]*mode\b/.test(s)) return "max";
+  if (/opus/.test(s) && /\b(effort|thinking)\b[^\n]{0,16}\bmax\b/.test(s)) return "max";
   if (/\bastra\b/.test(s)) return "astra";
   if (/\bo3-pro\b|gpt[-\w.]*pro\b/.test(s)) return "pro";
   return "";
@@ -44,6 +45,7 @@ function gateName(gate) {
 }
 
 const tool = process.argv[2] || "claude";
+const event = process.argv[3] || "prompt";
 const raw = readFileSync(0, "utf8");
 let body = {};
 try {
@@ -51,7 +53,12 @@ try {
 } catch {
   body = { prompt: raw };
 }
-const prompt = String(body.prompt || body.user_prompt || body.text || "");
+const prompt = String(body.prompt || body.user_prompt || body.text || body.task || "");
+const params = Array.isArray(body.model_params)
+  ? body.model_params.map((item) => `${item && item.id} ${item && item.value}`).join("\n")
+  : "";
+const toolModel = body.tool_input && (body.tool_input.model || body.tool_input.model_id || "");
+const heard = [body.model, body.model_id, body.subagent_model, toolModel, params, prompt].filter(Boolean).join("\n");
 const dir = join(homedir(), ".relay");
 
 function loadConfig() {
@@ -144,29 +151,37 @@ function money(value) {
 
 function allow(why) {
   note({ action: "allow", why });
+  if (tool === "cursor" && event !== "prompt") {
+    process.stdout.write(JSON.stringify({ permission: "allow" }));
+  }
+  process.exit(0);
+}
+
+function stopCursor(message) {
+  const reply = event === "prompt" ? { continue: false, user_message: message } : { permission: "deny", user_message: message };
+  process.stdout.write(JSON.stringify(reply));
   process.exit(0);
 }
 
 const config = loadConfig();
-if (!prompt.trim()) allow("empty");
+if (!heard.trim()) allow("empty");
 
-const gate = ownerGate(`${prompt}\n${String(body.model || body.model_id || "")}`);
+const gate = ownerGate(heard);
 if (gate && !ownerAccepted(prompt, gate)) {
-  const price = listPrice(prompt, gate);
+  const price = listPrice(prompt || heard, gate);
   const phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
   note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
   const stopped = stoppedThisWeek();
   const message = `Stopped. ${gateName(gate)} tried to start. Nothing was called. It does not start until this task says "${phrase}". List price of this prompt if it had run: ${money(price)}. Stopped this week: ${stopped.n}. List price of what did not run: ${money(stopped.list)}. Estimate, not a bill.`;
-  if (tool === "cursor") {
-    process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
-    process.exit(0);
-  }
+  if (tool === "cursor") stopCursor(message);
   process.stderr.write(`${message}\n`);
   process.exit(2);
 }
 if (gate) allow("owner-accepted");
 
 if (BILL.test(prompt)) allow("bill");
+
+if (tool === "cursor" && event !== "prompt") allow("included");
 
 const model = String(body.model || body.model_id || "");
 if (tool === "cursor") {
