@@ -3,6 +3,7 @@
 // Fable, Opus Max, GPT Pro, and Astra do not start unless the task accepts that model by name.
 // Code is for Composer standard. A reading is for Grok 4.7.
 // Writes one line per decision to ~/.relay/log.jsonl. Never writes the key or the prompt.
+// ~/.relay/config.json may hold repo, branch, cursorKey, cursorPool, otherPool.
 
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -28,11 +29,18 @@ function ownerAccepted(prompt, gate) {
   return prompt.toLowerCase().includes(phrase);
 }
 
-function gateMessage(gate) {
-  if (gate === "fable") return 'Fable 5.1 is $10 in and $50 out per million tokens. It does not start until this task says "I accept fable". Nothing was called.';
-  if (gate === "max") return 'Opus Max bills the Opus rate, $5 in and $25 out, on the long setting. It does not start until this task says "I accept max". Nothing was called.';
-  if (gate === "astra") return 'GPT-6 Astra is $10 in and $50 out per million tokens. It does not start until this task says "I accept astra". Nothing was called.';
-  return 'GPT Pro is $30 in and $180 out per million tokens. It does not start until this task says "I accept pro". Nothing was called.';
+function listPrice(text, gate) {
+  const input = Math.ceil(String(text).length / 4);
+  const rates = { fable: [10, 50], max: [5, 25], pro: [30, 180], astra: [10, 50] };
+  const pair = rates[gate] || [10, 50];
+  return (input / 1_000_000) * pair[0] + (800 / 1_000_000) * pair[1];
+}
+
+function gateName(gate) {
+  if (gate === "fable") return "Fable";
+  if (gate === "max") return "Opus Max";
+  if (gate === "astra") return "Astra";
+  return "GPT Pro";
 }
 
 const tool = process.argv[2] || "claude";
@@ -92,6 +100,25 @@ function poolWarning(config) {
   return parts.length ? ` ${parts.join(" ")}` : "";
 }
 
+function stoppedThisWeek() {
+  const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const sums = { n: 0, list: 0 };
+  try {
+    const lines = readFileSync(join(dir, "log.jsonl"), "utf8").split("\n");
+    for (const line of lines) {
+      if (!line) continue;
+      const row = JSON.parse(line);
+      if (row.action !== "stop" && row.why !== "owner-gate") continue;
+      if (Date.parse(row.t) < week) continue;
+      sums.n += 1;
+      sums.list += Number(row.listUsd) || 0;
+    }
+  } catch {
+    // No log yet.
+  }
+  return sums;
+}
+
 function totals() {
   const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const sums = { week: 0, all: 0 };
@@ -125,8 +152,11 @@ if (!prompt.trim()) allow("empty");
 
 const gate = ownerGate(`${prompt}\n${String(body.model || body.model_id || "")}`);
 if (gate && !ownerAccepted(prompt, gate)) {
-  note({ action: "hold", pinned: gate, sent: false, savedUsd: 0, why: "owner-gate" });
-  const message = gateMessage(gate);
+  const price = listPrice(prompt, gate);
+  const phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
+  note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
+  const stopped = stoppedThisWeek();
+  const message = `Stopped. ${gateName(gate)} tried to start. Nothing was called. It does not start until this task says "${phrase}". List price of this prompt if it had run: ${money(price)}. Stopped this week: ${stopped.n}. List price of what did not run: ${money(stopped.list)}. Estimate, not a bill.`;
   if (tool === "cursor") {
     process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
     process.exit(0);
