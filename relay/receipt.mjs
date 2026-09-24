@@ -31,7 +31,7 @@ for (const line of lines) {
   }
   if (Number(row.savedUsd) > 0) counts.all += Number(row.savedUsd);
   if (Date.parse(row.t) < cutoff) continue;
-  if (row.action === "stop" || row.why === "owner-gate") {
+  if (row.action === "stop" || row.action === "cheap" || row.why === "owner-gate" || row.why === "cheap") {
     counts.stops += 1;
     counts.list += Number(row.listUsd) || 0;
     if (row.sent) counts.sent += 1;
@@ -49,7 +49,7 @@ for (const line of lines) {
 const cursorPool = Number(config.cursorPool);
 const otherPool = Number(config.otherPool);
 console.log(`Last 7 days`);
-console.log(`Stopped: ${counts.stops}`);
+console.log(`Cheap tasks kept off the expensive model: ${counts.stops}`);
 console.log(`List price if those prompts had been billed at that model's rate, guessing 800 output tokens: $${counts.list.toFixed(2)}. Not money returned.`);
 console.log(`Held: ${counts.hold}`);
 console.log(`Handed to Composer or Grok: ${counts.sent}`);

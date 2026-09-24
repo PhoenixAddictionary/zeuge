@@ -11,6 +11,17 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+const CHEAP =
+  /\b(typo|spelling|grammar|punctuat|proofread|rename|reformat|prettier|\blint\b|commit message|changelog|translate|shorten|tldr|tl;dr|summarise|summarize|subject line|more professional|fix the title|add a comment|change the (color|colour|font|spacing|padding|margin)|make (it|this) (shorter|longer|a list|into a list|bullets)|rewrite this email|email subject|bullet points?|simpler words|plain language|what does this (error|word|sentence|line) mean)\b/i;
+const HARD =
+  /\b(from scratch|rewrite the (app|system|repo|codebase|architecture)|migrat|security review|race condition|concurren|redesign the|incident|data loss|architect)\b/i;
+
+function cheapTask(text) {
+  if (!String(text).trim()) return false;
+  if (HARD.test(text)) return false;
+  return CHEAP.test(text);
+}
+
 const JUDGMENT = /\b(verdict|ruling|constitution|red-team|red team|abstain|citation|primary source|is this true)\b/i;
 const BILL = /\bbill this model\b/i;
 const INCLUDED = /^(composer-|grok-4)/i;
@@ -175,7 +186,7 @@ function stoppedThisWeek() {
     for (const line of lines) {
       if (!line) continue;
       const row = JSON.parse(line);
-      if (row.action !== "stop" && row.why !== "owner-gate") continue;
+      if (row.action !== "cheap" && row.action !== "stop" && row.why !== "cheap" && row.why !== "owner-gate") continue;
       if (Date.parse(row.t) < week) continue;
       sums.n += 1;
       sums.list += Number(row.listUsd) || 0;
@@ -226,32 +237,32 @@ function stopCursor(message) {
 const config = loadConfig();
 if (!heard.trim()) allow("empty");
 
+let divert = false;
 let refused = "";
 let phrase = "";
+const cheap = cheapTask(prompt);
 const gate = ownerGate(heard);
-if (gate && !ownerAccepted(prompt, gate)) {
-  phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : "I accept pro";
-  const price = listPrice(prompt || heard, gate);
-  if ((tool === "cursor" && event === "tool") || !prompt.trim()) {
-    note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: price, why: "owner-gate" });
-    const stopped = stoppedThisWeek();
-    const message = `Stopped. ${gateName(gate)} did not start. This call was not sent on. Write "${phrase}" in the task if you mean it. Stopped this week: ${stopped.n}.`;
-    if (tool === "cursor") stopCursor(message);
-    process.stderr.write(`${message}\n`);
-    process.exit(2);
-  }
-  refused = gate;
-}
-if (gate && !refused) allow("owner-accepted");
-
+if (gate && ownerAccepted(prompt, gate)) allow("owner-accepted");
 if (BILL.test(prompt)) allow("bill");
 
-if (!refused && tool === "cursor" && event !== "prompt") allow("included");
-
-const model = String(body.model || body.model_id || "");
-if (!refused && tool === "cursor") {
-  if (model && INCLUDED.test(model) && !REFUSED.test(model)) allow("included");
+const move = cheap && (tool !== "cursor" || Boolean(gate));
+if (!move) {
+  if (tool === "cursor" && event === "prompt") {
+    note({ action: "allow", why: cheap ? "included" : "kept" });
+    process.stdout.write(JSON.stringify({ continue: true }));
+    process.exit(0);
+  }
+  allow(cheap ? "included" : "kept");
 }
+
+if (tool === "cursor" && event === "tool") {
+  note({ action: "cheap", pinned: gate || "composer-2.5", sent: false, savedUsd: 0, listUsd: gate ? listPrice(prompt, gate) : 0, why: "cheap" });
+  stopCursor(`Cheap task. ${gate ? gateName(gate) : "The expensive model"} did not start. Switch the picker to Composer.`);
+}
+
+divert = true;
+refused = gate || "cheap";
+phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : gate === "pro" ? "I accept pro" : "";
 
 const pinned = JUDGMENT.test(prompt) ? "grok-4.7" : "composer-2.5";
 const key = process.env.CURSOR_API_KEY || String(config.cursorKey || "");
@@ -260,7 +271,7 @@ const branch = process.env.RELAY_BRANCH || String(config.branch || "main");
 let handoff = "";
 let sent = false;
 let skip = "";
-if (refused && tool === "cursor") {
+if (divert && tool === "cursor") {
   skip = " Not sent to a cloud agent. This chat already has the files. Switch the picker to Composer.";
 } else if (treeDirty()) {
   skip = " Not sent to a cloud agent. This checkout has changes GitHub does not have.";
@@ -304,10 +315,21 @@ if (skip) {
       : " Not sent. Set repo and the Cursor key in ~/.relay/config.json.";
 }
 
-if (refused) {
-  note({ action: "stop", pinned: refused, sent, savedUsd: 0, listUsd: listPrice(prompt, refused), why: "owner-gate", task: taskKey(prompt) });
+if (divert) {
+  const name = refused && refused !== "cheap" ? gateName(refused) : "The expensive model";
+  note({
+    action: "cheap",
+    pinned: refused && refused !== "cheap" ? refused : pinned,
+    sent,
+    savedUsd: 0,
+    listUsd: refused && refused !== "cheap" ? listPrice(prompt, refused) : 0,
+    why: "cheap",
+    task: taskKey(prompt),
+  });
   const stopped = stoppedThisWeek();
-  const message = `${sent ? `Stopped. ${gateName(refused)} did not start. The task went to ${pinned}.${handoff}` : `Stopped. ${gateName(refused)} did not start. The task was not started.${handoff}`} Write "${phrase}" if you mean ${gateName(refused)}. Stopped this week: ${stopped.n}.`;
+  const message = tool === "cursor"
+    ? `Cheap task. ${name} did not start. Switch the picker to Composer. Cheap tasks this week: ${stopped.n}.`
+    : `${sent ? `Cheap task. It went to ${pinned}.${handoff}` : `Cheap task. The expensive model did not start.${handoff}`} Cheap tasks this week: ${stopped.n}.`;
   if (tool === "cursor" && event !== "prompt") {
     process.stdout.write(JSON.stringify({ permission: "deny", user_message: message }));
     process.exit(0);
