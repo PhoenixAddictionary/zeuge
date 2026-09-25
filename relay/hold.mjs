@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// A reading runs on grok-4.7. Code runs on composer-2.5 when the task starts with lane:code.
-// No word list decides that. Fable, Opus Max, GPT Pro, and Astra do not start unless the task accepts that model by name.
+// The buyer does not choose a model. A costlier model does not start from this hook.
 // Writes one line per decision to ~/.relay/log.jsonl. Never writes the key or the prompt.
 // ~/.relay/config.json may hold repo, branch, cursorKey, cursorPool, otherPool.
 
