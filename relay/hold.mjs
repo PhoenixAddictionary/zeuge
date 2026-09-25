@@ -1,26 +1,14 @@
 #!/usr/bin/env node
-// Stops a metered tool unless the prompt says "bill this model".
-// Fable, Opus Max, GPT Pro, and Astra do not start unless the task accepts that model by name.
-// Code is for Composer standard. A reading is for Grok 4.7.
+// A reading runs on grok-4.7. Code runs on composer-2.5 when the task starts with lane:code.
+// No word list decides that. Fable, Opus Max, GPT Pro, and Astra do not start unless the task accepts that model by name.
 // Writes one line per decision to ~/.relay/log.jsonl. Never writes the key or the prompt.
 // ~/.relay/config.json may hold repo, branch, cursorKey, cursorPool, otherPool.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { execSync, spawn } from "node:child_process";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
-
-const CHEAP =
-  /\b(typo|spelling|grammar|punctuat|proofread|rename|reformat|prettier|\blint\b|commit message|changelog|translate|shorten|tldr|tl;dr|summarise|summarize|subject line|more professional|fix the title|add a comment|change the (color|colour|font|spacing|padding|margin)|make (it|this) (shorter|longer|a list|into a list|bullets)|rewrite this email|email subject|bullet points?|simpler words|plain language|what does this (error|word|sentence|line) mean)\b/i;
-const HARD =
-  /\b(from scratch|rewrite the (app|system|repo|codebase|architecture)|migrat|security review|race condition|concurren|redesign the|incident|data loss|architect)\b/i;
-
-function cheapTask(text) {
-  if (!String(text).trim()) return false;
-  if (HARD.test(text)) return false;
-  return CHEAP.test(text);
-}
 
 const BILL = /\bbill this model\b/i;
 const INCLUDED = /^(composer-|grok-4)/i;
@@ -236,52 +224,6 @@ function stopCursor(message) {
   process.exit(0);
 }
 
-function findAgent() {
-  const local = process.env.LOCALAPPDATA || "";
-  const direct = join(local, "cursor-agent", "agent.cmd");
-  if (direct && existsSync(direct)) return direct;
-  if (process.platform !== "win32") return "";
-  try {
-    const lines = execSync("where.exe agent.cmd", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.toLowerCase().includes("cursor-agent") && !line.toLowerCase().includes("\\.grok\\"));
-    return lines[0] || "";
-  } catch {
-    return "";
-  }
-}
-
-function startComposer(text, cwd) {
-  const bin = findAgent();
-  if (!bin) return Promise.resolve("");
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(bin, ["-p", "--force", "--model", "composer-2.5", "--output-format", "text", String(text).slice(0, 4000)], {
-        cwd: cwd || undefined,
-        windowsHide: true,
-        stdio: "ignore",
-      });
-    } catch {
-      resolve("");
-      return;
-    }
-    let done = false;
-    const finish = (value) => {
-      if (done) return;
-      done = true;
-      resolve(value);
-    };
-    child.once("error", () => finish(""));
-    child.once("exit", () => finish(""));
-    setTimeout(() => {
-      child.unref();
-      finish(String(child.pid || "started"));
-    }, 1200);
-  });
-}
-
 function block(message) {
   if (tool === "cursor") stopCursor(message);
   process.stderr.write(`${message}\n`);
@@ -290,24 +232,20 @@ function block(message) {
 
 if (!heard.trim()) allow("empty");
 
-const cheap = cheapTask(prompt);
 const gate = ownerGate(heard);
 if (gate && ownerAccepted(prompt, gate)) allow("owner-accepted");
 if (BILL.test(prompt)) allow("bill");
-if (!cheap) allow("kept");
-if (event === "tool") {
-  if (gate) block("Cheap task. This model does not get it. Switch to Composer and send again.");
-  allow("included");
-}
-
-const pid = await startComposer(prompt, roots()[0]);
-if (pid) {
-  note({ action: "cheap", pinned: "composer-2.5", sent: true, savedUsd: 0, listUsd: gate ? listPrice(prompt, gate) : 0, why: "local", task: taskKey(prompt) });
-  block("Cheap task. Composer is running it in this folder. This model was not started.");
-}
 if (gate) {
-  note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: listPrice(prompt, gate), why: "switch", task: taskKey(prompt) });
-  block("Cheap task. This model does not get it. Switch to Composer and send again.");
+  note({
+    action: "stop",
+    pinned: gate,
+    sent: false,
+    savedUsd: 0,
+    listUsd: listPrice(prompt, gate),
+    why: "owner-gate",
+    task: taskKey(prompt),
+  });
+  block(`${gateName(gate)} does not start from this hook. grok-4.7 or composer-2.5 runs the task.`);
 }
-allow("nowhere");
+allow("kept");
 
