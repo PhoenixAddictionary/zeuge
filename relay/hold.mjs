@@ -5,8 +5,8 @@
 // Writes one line per decision to ~/.relay/log.jsonl. Never writes the key or the prompt.
 // ~/.relay/config.json may hold repo, branch, cursorKey, cursorPool, otherPool.
 
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +22,6 @@ function cheapTask(text) {
   return CHEAP.test(text);
 }
 
-const JUDGMENT = /\b(verdict|ruling|constitution|red-team|red team|abstain|citation|primary source|is this true)\b/i;
 const BILL = /\bbill this model\b/i;
 const INCLUDED = /^(composer-|grok-4)/i;
 const REFUSED = /fast|auto|claude|gpt|gemini|opus|sonnet|codex/i;
@@ -222,6 +221,9 @@ function money(value) {
 
 function allow(why) {
   note({ action: "allow", why });
+  if (tool === "cursor" && event === "prompt") {
+    process.stdout.write(JSON.stringify({ continue: true }));
+  }
   if (tool === "cursor" && event !== "prompt") {
     process.stdout.write(JSON.stringify({ permission: "allow" }));
   }
@@ -234,121 +236,78 @@ function stopCursor(message) {
   process.exit(0);
 }
 
-const config = loadConfig();
-if (!heard.trim()) allow("empty");
-
-let divert = false;
-let refused = "";
-let phrase = "";
-const cheap = cheapTask(prompt);
-const gate = ownerGate(heard);
-if (gate && ownerAccepted(prompt, gate)) allow("owner-accepted");
-if (BILL.test(prompt)) allow("bill");
-
-const move = cheap && (tool !== "cursor" || Boolean(gate));
-if (!move) {
-  if (tool === "cursor" && event === "prompt") {
-    note({ action: "allow", why: cheap ? "included" : "kept" });
-    process.stdout.write(JSON.stringify({ continue: true }));
-    process.exit(0);
-  }
-  allow(cheap ? "included" : "kept");
-}
-
-if (tool === "cursor" && event === "tool") {
-  note({ action: "cheap", pinned: gate || "composer-2.5", sent: false, savedUsd: 0, listUsd: gate ? listPrice(prompt, gate) : 0, why: "cheap" });
-  stopCursor(`Cheap task. ${gate ? gateName(gate) : "The expensive model"} did not start. Switch the picker to Composer.`);
-}
-
-divert = true;
-refused = gate || "cheap";
-phrase = gate === "fable" ? "I accept fable" : gate === "max" ? "I accept max" : gate === "astra" ? "I accept astra" : gate === "pro" ? "I accept pro" : "";
-
-const pinned = JUDGMENT.test(prompt) ? "grok-4.7" : "composer-2.5";
-const key = process.env.CURSOR_API_KEY || String(config.cursorKey || "");
-const repo = process.env.RELAY_REPO || String(config.repo || "") || discoverRepo();
-const branch = process.env.RELAY_BRANCH || String(config.branch || "main");
-let handoff = "";
-let sent = false;
-let skip = "";
-if (divert && tool === "cursor") {
-  skip = " Not sent to a cloud agent. This chat already has the files. Switch the picker to Composer.";
-} else if (treeDirty()) {
-  skip = " Not sent to a cloud agent. This checkout has changes GitHub does not have.";
-} else if (recentlySent(prompt)) {
-  skip = " Already handed on. A second agent was not started.";
-}
-
-const outbound = refused
-  ? `Do this on ${pinned} only. Do not call Fable, Opus Max, GPT Pro, or Astra.\n\n${prompt}`
-  : prompt;
-
-if (skip) {
-  handoff = skip;
-} else if (key.startsWith("crsr_") && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(repo)) {
+function findAgent() {
+  const local = process.env.LOCALAPPDATA || "";
+  const direct = join(local, "cursor-agent", "agent.cmd");
+  if (direct && existsSync(direct)) return direct;
+  if (process.platform !== "win32") return "";
   try {
-    const response = await fetch("https://api.cursor.com/v1/agents", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: { text: outbound.slice(0, 12000) },
-        model: pinned.startsWith("composer")
-          ? { id: pinned, params: [{ id: "fast", value: "false" }] }
-          : { id: pinned },
-        repos: [{ url: repo.replace(/\/$/, ""), startingRef: branch }],
-        autoCreatePR: false,
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    sent = response.ok;
-    handoff = response.ok
-      ? ` Handed to ${pinned}. ${data.agent?.url || data.agent?.id || "Cursor accepted it."}`
-      : ` Cursor did not take it (${response.status}).`;
+    const lines = execSync("where.exe agent.cmd", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.toLowerCase().includes("cursor-agent") && !line.toLowerCase().includes("\\.grok\\"));
+    return lines[0] || "";
   } catch {
-    handoff = " Cursor could not be reached.";
+    return "";
   }
-} else {
-  handoff = key.startsWith("crsr_")
-    ? " Not sent. The repo in ~/.relay/config.json is missing or not a github.com URL."
-    : repo
-      ? " Not sent. The Cursor key is not in CURSOR_API_KEY or cursorKey."
-      : " Not sent. Set repo and the Cursor key in ~/.relay/config.json.";
 }
 
-if (divert) {
-  const name = refused && refused !== "cheap" ? gateName(refused) : "The expensive model";
-  note({
-    action: "cheap",
-    pinned: refused && refused !== "cheap" ? refused : pinned,
-    sent,
-    savedUsd: 0,
-    listUsd: refused && refused !== "cheap" ? listPrice(prompt, refused) : 0,
-    why: "cheap",
-    task: taskKey(prompt),
+function startComposer(text, cwd) {
+  const bin = findAgent();
+  if (!bin) return Promise.resolve("");
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(bin, ["-p", "--force", "--model", "composer-2.5", "--output-format", "text", String(text).slice(0, 4000)], {
+        cwd: cwd || undefined,
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } catch {
+      resolve("");
+      return;
+    }
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      resolve(value);
+    };
+    child.once("error", () => finish(""));
+    child.once("exit", () => finish(""));
+    setTimeout(() => {
+      child.unref();
+      finish(String(child.pid || "started"));
+    }, 1200);
   });
-  const stopped = stoppedThisWeek();
-  const message = tool === "cursor"
-    ? `Cheap task. ${name} did not start. Switch the picker to Composer. Cheap tasks this week: ${stopped.n}.`
-    : `${sent ? `Cheap task. It went to ${pinned}.${handoff}` : `Cheap task. The expensive model did not start.${handoff}`} Cheap tasks this week: ${stopped.n}.`;
-  if (tool === "cursor" && event !== "prompt") {
-    process.stdout.write(JSON.stringify({ permission: "deny", user_message: message }));
-    process.exit(0);
-  }
-  if (tool === "cursor") {
-    process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
-    process.exit(0);
-  }
+}
+
+function block(message) {
+  if (tool === "cursor") stopCursor(message);
   process.stderr.write(`${message}\n`);
   process.exit(2);
 }
 
-note({ action: "hold", pinned, sent, savedUsd: sent ? estimate(prompt) : 0, task: taskKey(prompt) });
-const message = `${sent ? `Held. On ${pinned}, inside the Cursor seat.${handoff}` : `Held. Nothing metered was called.${handoff}`}${poolWarning(config)}`;
+if (!heard.trim()) allow("empty");
 
-if (tool === "cursor") {
-  process.stdout.write(JSON.stringify({ continue: false, user_message: message }));
-  process.exit(0);
+const cheap = cheapTask(prompt);
+const gate = ownerGate(heard);
+if (gate && ownerAccepted(prompt, gate)) allow("owner-accepted");
+if (BILL.test(prompt)) allow("bill");
+if (!cheap) allow("kept");
+if (event === "tool") {
+  if (gate) block("Cheap task. This model does not get it. Switch to Composer and send again.");
+  allow("included");
 }
 
-process.stderr.write(`${message}\n`);
-process.exit(2);
+const pid = await startComposer(prompt, roots()[0]);
+if (pid) {
+  note({ action: "cheap", pinned: "composer-2.5", sent: true, savedUsd: 0, listUsd: gate ? listPrice(prompt, gate) : 0, why: "local", task: taskKey(prompt) });
+  block("Cheap task. Composer is running it in this folder. This model was not started.");
+}
+if (gate) {
+  note({ action: "stop", pinned: gate, sent: false, savedUsd: 0, listUsd: listPrice(prompt, gate), why: "switch", task: taskKey(prompt) });
+  block("Cheap task. This model does not get it. Switch to Composer and send again.");
+}
+allow("nowhere");
+
